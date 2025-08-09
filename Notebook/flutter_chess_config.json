@@ -11,11 +11,11 @@
     5
   ],
   "difficulty_descriptions": {
-    "1": "Beginner - Makes obvious mistakes",
-    "2": "Easy - Casual play level",
-    "3": "Medium - Club player level",
-    "4": "Hard - Tournament level",
-    "5": "Expert - Master level"
+  "1": "Beginner",
+  "2": "Amateur",
+  "3": "Intermediate",
+  "4": "Advanced",
+  "5": "Hard"
   },
   "model_format": "torchscript",
   "input_shape": [

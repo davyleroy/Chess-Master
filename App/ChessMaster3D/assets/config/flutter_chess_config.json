@@ -1,0 +1,17 @@
+{
+  "model_info": {
+    "type": "neural_network",
+    "trained_games": 100
+  },
+  "difficulty_levels": [1,2,3,4,5],
+  "difficulty_descriptions": {
+    "1": "Beginner",
+    "2": "Amateur",
+    "3": "Intermediate",
+    "4": "Advanced",
+    "5": "Hard"
+  },
+  "model_format": "torchscript",
+  "input_shape": [1,12,8,8],
+  "output_shapes": {"value":[1,1], "policy":[1,4096]}
+}

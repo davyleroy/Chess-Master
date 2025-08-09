@@ -1,0 +1,5 @@
+/.venv
+/Notebook/__pycache__/
+/Notebook/*.png
+/Notebook/*.ipynb
+/Notebook/*pth

@@ -435,8 +435,8 @@ class FlutterExporter:
             
             # Also save as ONNX if available
             try:
-                import torch.onnx
-                torch.onnx.export(
+                from torch import onnx as torch_onnx
+                torch_onnx.export(
                     model, dummy_input, f"{export_path}.onnx",
                     export_params=True, opset_version=11,
                     do_constant_folding=True,
