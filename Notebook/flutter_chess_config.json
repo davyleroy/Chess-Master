@@ -1,0 +1,37 @@
+{
+  "model_info": {
+    "type": "neural_network",
+    "trained_games": 100
+  },
+  "difficulty_levels": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "difficulty_descriptions": {
+    "1": "Beginner - Makes obvious mistakes",
+    "2": "Easy - Casual play level",
+    "3": "Medium - Club player level",
+    "4": "Hard - Tournament level",
+    "5": "Expert - Master level"
+  },
+  "model_format": "torchscript",
+  "input_shape": [
+    1,
+    12,
+    8,
+    8
+  ],
+  "output_shapes": {
+    "value": [
+      1,
+      1
+    ],
+    "policy": [
+      1,
+      4096
+    ]
+  }
+}
