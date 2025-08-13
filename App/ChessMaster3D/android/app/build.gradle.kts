@@ -8,7 +8,9 @@ plugins {
 android {
     namespace = "com.example.chess_master_3d"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Override Flutter's default NDK with plugin-required version
+    ndkVersion = "27.0.12077973"
+    // Limit ABIs during development to speed up builds (emulator is x86_64) while still producing a single APK name.
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -22,12 +24,18 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.chess_master_3d"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // Configure SDK & versioning from Flutter
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        ndk {
+            // Focus on physical device performance: build only arm64 for fastest iteration.
+            // To test on x86_64 emulator again, temporarily change this list to listOf("x86_64") or add back both.
+                abiFilters.clear()
+                // Include emulator (x86_64) plus physical device ABIs for local testing.
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     buildTypes {

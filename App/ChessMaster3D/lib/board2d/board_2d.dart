@@ -7,7 +7,21 @@ class _StartOptions {
   final GameMode mode;
   final int difficulty;
   final chess.Color humanColor; // for single-player
-  const _StartOptions(this.mode, this.difficulty, this.humanColor);
+  final _TimeControl? timeControl; // null => untimed
+  const _StartOptions(
+      this.mode, this.difficulty, this.humanColor, this.timeControl);
+}
+
+class _TimeControl {
+  final Duration base;
+  final Duration increment;
+  const _TimeControl(this.base, this.increment);
+  String label() {
+    if (increment.inSeconds == 0) {
+      return "${base.inMinutes}:${(base.inSeconds % 60).toString().padLeft(2, '0')}";
+    }
+    return "${base.inMinutes}+${increment.inSeconds}";
+  }
 }
 
 class Board2D extends StatefulWidget {
@@ -32,6 +46,13 @@ class _Board2DState extends State<Board2D> {
   final List<String> _capturedBlack =
       []; // pieces captured from Black (shown near White)
   chess.Color _humanColor = chess.Color.WHITE; // default human is White
+  _TimeControl? _timeControl;
+  Duration? _timeWhite;
+  Duration? _timeBlack;
+  chess.Color _sideToMoveClock = chess.Color.WHITE;
+  bool _flagged = false;
+  chess.Color? _winnerOnTime;
+  DateTime? _lastTick;
 
   @override
   void initState() {
@@ -40,6 +61,56 @@ class _Board2DState extends State<Board2D> {
     _difficulty = widget.difficulty;
     ctrl = GameController(mode: _mode);
     _ai = StockfishAI();
+    _startTickLoop();
+  }
+
+  void _startTickLoop() {
+    _lastTick = DateTime.now();
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(milliseconds: 250));
+      if (!mounted) return false;
+      final now = DateTime.now();
+      if (_timeControl != null && !_flagged && !ctrl.gameOver) {
+        final dt = now.difference(_lastTick!);
+        if (dt > Duration.zero) {
+          setState(() {
+            if (_sideToMoveClock == chess.Color.WHITE) {
+              _timeWhite = (_timeWhite! - dt);
+              if (_timeWhite!.inMilliseconds <= 0) {
+                _timeWhite = Duration.zero;
+                _flagged = true;
+                _winnerOnTime = chess.Color.BLACK;
+              }
+            } else {
+              _timeBlack = (_timeBlack! - dt);
+              if (_timeBlack!.inMilliseconds <= 0) {
+                _timeBlack = Duration.zero;
+                _flagged = true;
+                _winnerOnTime = chess.Color.WHITE;
+              }
+            }
+          });
+        }
+      }
+      _lastTick = now;
+      return true; // continue loop
+    });
+  }
+
+  void _resetClock(_TimeControl? tc) {
+    _timeControl = tc;
+    if (tc == null) {
+      _timeWhite = null;
+      _timeBlack = null;
+      _flagged = false;
+      _winnerOnTime = null;
+      return;
+    }
+    _timeWhite = tc.base;
+    _timeBlack = tc.base;
+    _flagged = false;
+    _winnerOnTime = null;
+    _sideToMoveClock = chess.Color.WHITE;
   }
 
   @override
@@ -53,6 +124,7 @@ class _Board2DState extends State<Board2D> {
         children: [
           // Captured by White (i.e., black pieces taken)
           _capturedRow(_capturedBlack, alignEnd: false),
+          if (_timeControl != null) _clocksRow(),
           Expanded(
             child: Center(
               child: AspectRatio(
@@ -80,6 +152,7 @@ class _Board2DState extends State<Board2D> {
                   _mode = opts.mode;
                   _difficulty = opts.difficulty;
                   _humanColor = opts.humanColor;
+                  _resetClock(opts.timeControl);
                   ctrl = GameController(mode: _mode);
                   selected = null;
                   targets = const [];
@@ -174,6 +247,7 @@ class _Board2DState extends State<Board2D> {
       if (ok) {
         final after = _snapshotBoard();
         _recordCaptureByDiff(before, after, mover);
+        _applyIncrementAndSwitch(mover);
         selected = null;
         targets = const [];
       } else {
@@ -212,6 +286,16 @@ class _Board2DState extends State<Board2D> {
     GameMode selMode = _mode;
     int selDiff = _difficulty;
     chess.Color selColor = _humanColor;
+    _TimeControl? selTc = _timeControl;
+    final presets = <_TimeControl?>[
+      null,
+      const _TimeControl(Duration(minutes: 1), Duration.zero),
+      const _TimeControl(Duration(minutes: 3), Duration(seconds: 2)),
+      const _TimeControl(Duration(minutes: 5), Duration.zero),
+      const _TimeControl(Duration(minutes: 10), Duration.zero),
+      const _TimeControl(Duration(minutes: 15), Duration(seconds: 10)),
+      const _TimeControl(Duration(minutes: 30), Duration.zero),
+    ];
     return showDialog<_StartOptions>(
       context: context,
       builder: (_) => StatefulBuilder(
@@ -267,6 +351,15 @@ class _Board2DState extends State<Board2D> {
                     groupValue: selDiff,
                     onChanged: (x) => setL(() => selDiff = x!),
                   ),
+                const Divider(),
+                const Text('Time Control'),
+                for (final tc in presets)
+                  RadioListTile<_TimeControl?>(
+                    title: Text(tc == null ? 'Untimed' : tc.label()),
+                    value: tc,
+                    groupValue: selTc,
+                    onChanged: (v) => setL(() => selTc = v),
+                  ),
               ],
             ),
           ),
@@ -281,9 +374,8 @@ class _Board2DState extends State<Board2D> {
                   _StartOptions(
                       selMode,
                       selDiff,
-                      selMode == GameMode.single
-                          ? selColor
-                          : chess.Color.WHITE)),
+                      selMode == GameMode.single ? selColor : chess.Color.WHITE,
+                      selTc)),
               child: const Text('Start'),
             ),
           ],
@@ -305,6 +397,7 @@ class _Board2DState extends State<Board2D> {
     try {
       final move =
           await _ai.bestMove(ctrl.game, DifficultyX.fromLevel(_difficulty));
+      await Future.delayed(const Duration(seconds: 2));
       if (move != null) {
         setState(() {
           final mover = ctrl.game.turn; // AI mover color
@@ -312,11 +405,25 @@ class _Board2DState extends State<Board2D> {
           ctrl.moveRaw(move);
           final after = _snapshotBoard();
           _recordCaptureByDiff(before, after, mover);
+          _applyIncrementAndSwitch(mover);
         });
         if (ctrl.gameOver) _showGameOverDialog();
       }
     } finally {
       _aiThinking = false;
+    }
+  }
+
+  void _applyIncrementAndSwitch(chess.Color mover) {
+    if (_timeControl == null) return;
+    final inc = _timeControl!.increment;
+    if (_timeWhite == null || _timeBlack == null) return;
+    if (mover == chess.Color.WHITE) {
+      _timeWhite = _timeWhite! + inc;
+      _sideToMoveClock = chess.Color.BLACK;
+    } else {
+      _timeBlack = _timeBlack! + inc;
+      _sideToMoveClock = chess.Color.WHITE;
     }
   }
 
@@ -430,6 +537,11 @@ class _Board2DState extends State<Board2D> {
 
   String _resultText() {
     final g = ctrl.game;
+    if (_flagged && _winnerOnTime != null) {
+      return _winnerOnTime == chess.Color.WHITE
+          ? 'White wins on time'
+          : 'Black wins on time';
+    }
     if (g.in_checkmate) {
       return g.turn == chess.Color.WHITE
           ? 'Black wins by checkmate'
@@ -455,6 +567,40 @@ class _Board2DState extends State<Board2D> {
             onPressed: () => Navigator.pop(context),
             child: const Text('OK'),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _clocksRow() {
+    String fmt(Duration? d) {
+      if (d == null) return '--:--';
+      final m = d.inMinutes;
+      final s = d.inSeconds % 60;
+      return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
+
+    final active = _sideToMoveClock;
+    Color dot(chess.Color c) => active == c ? Colors.green : Colors.grey;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(children: [
+            Icon(Icons.circle, size: 10, color: dot(chess.Color.WHITE)),
+            const SizedBox(width: 4),
+            const Text('White'),
+            const SizedBox(width: 6),
+            Text(fmt(_timeWhite)),
+          ]),
+          Row(children: [
+            Text(fmt(_timeBlack)),
+            const SizedBox(width: 6),
+            const Text('Black'),
+            const SizedBox(width: 4),
+            Icon(Icons.circle, size: 10, color: dot(chess.Color.BLACK)),
+          ]),
         ],
       ),
     );
