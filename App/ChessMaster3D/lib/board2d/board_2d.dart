@@ -182,33 +182,52 @@ class _Board2DState extends State<Board2D> {
   List<Widget> _buildSquares() {
     final g = ctrl.game;
     final List<Widget> out = [];
-    // Ranks 8..1 (top to bottom), files a..h (left to right)
-    for (int rank = 7; rank >= 0; rank--) {
-      for (int file = 0; file < 8; file++) {
-        // index not needed; compute square directly
-        final fileChar = String.fromCharCode('a'.codeUnitAt(0) + file);
-        final sq = '$fileChar${rank + 1}';
-        final piece = g.get(sq);
-        final dark = (file + rank) % 2 == 1;
-        final isSel = selected == sq;
-        final isTarget = targets.contains(sq);
-        out.add(GestureDetector(
-          onTap: () => _onSquareTap(sq, piece != null),
-          child: Container(
-            decoration: BoxDecoration(
-              color: isSel
-                  ? Colors.teal.withValues(alpha: 0.6)
-                  : isTarget
-                      ? Colors.orange.withValues(alpha: 0.5)
-                      : (dark ? Colors.brown[700] : Colors.brown[200]),
-              border: Border.all(color: Colors.black12, width: 0.5),
-            ),
-            child: Center(child: _pieceGlyph(piece)),
-          ),
-        ));
+    final flip = _mode == GameMode.single && _humanColor == chess.Color.BLACK;
+    // When not flipped: ranks 8..1 top->bottom, files a..h left->right.
+    // When flipped for Black perspective: ranks 1..8 top->bottom, files h..a left->right (full 180° rotation).
+    if (!flip) {
+      for (int rank = 7; rank >= 0; rank--) {
+        for (int file = 0; file < 8; file++) {
+          final fileChar = String.fromCharCode('a'.codeUnitAt(0) + file);
+          final sq = '$fileChar${rank + 1}';
+          final piece = g.get(sq);
+          final dark = (file + rank) % 2 == 1;
+          out.add(_squareWidget(sq, piece, dark));
+        }
+      }
+    } else {
+      for (int rank = 0; rank < 8; rank++) {
+        // rank 1 at top
+        for (int file = 7; file >= 0; file--) {
+          // file h at left
+          final fileChar = String.fromCharCode('a'.codeUnitAt(0) + file);
+          final sq = '$fileChar${rank + 1}';
+          final piece = g.get(sq);
+          final dark = (file + rank) % 2 == 1; // still valid pattern
+          out.add(_squareWidget(sq, piece, dark));
+        }
       }
     }
     return out;
+  }
+
+  Widget _squareWidget(String sq, chess.Piece? piece, bool dark) {
+    final isSel = selected == sq;
+    final isTarget = targets.contains(sq);
+    return GestureDetector(
+      onTap: () => _onSquareTap(sq, piece != null),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSel
+              ? Colors.teal.withValues(alpha: 0.6)
+              : isTarget
+                  ? Colors.orange.withValues(alpha: 0.5)
+                  : (dark ? Colors.brown[700] : Colors.brown[200]),
+          border: Border.all(color: Colors.black12, width: 0.5),
+        ),
+        child: Center(child: _pieceGlyph(piece)),
+      ),
+    );
   }
 
   void _onSquareTap(String sq, bool hasPiece) {
@@ -264,6 +283,7 @@ class _Board2DState extends State<Board2D> {
   Widget _pieceGlyph(chess.Piece? p) {
     if (p == null) return const SizedBox.shrink();
     final isWhite = p.color == chess.Color.WHITE;
+    // Harmonize look: use solid glyphs for both; lighten white, darken black.
     final color = isWhite ? Colors.white : Colors.black87;
     final code = switch (p.type) {
       chess.PieceType.PAWN => '♙',
@@ -279,7 +299,22 @@ class _Board2DState extends State<Board2D> {
         ? code
         : {'♙': '♟', '♖': '♜', '♘': '♞', '♗': '♝', '♕': '♛', '♔': '♚'}[code] ??
             code;
-    return Text(text, style: TextStyle(fontSize: 28, color: color));
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 28,
+        color: color,
+        shadows: isWhite
+            ? [
+                const Shadow(
+                    color: Colors.black45, offset: Offset(0, 0), blurRadius: 2)
+              ]
+            : [
+                const Shadow(
+                    color: Colors.white24, offset: Offset(0, 0), blurRadius: 2)
+              ],
+      ),
+    );
   }
 
   Future<_StartOptions?> _showNewGameDialog() async {
